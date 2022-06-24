@@ -29,4 +29,3 @@ There's also a script to generate a soundfont, which is significantly easier.
 
 * Add working pitch bends
 * Fix timing issues somehow???
-* Allow dynamically creating as many voices as needed

@@ -43,6 +43,9 @@ class DectalkVoice:
             self.stream.append(f"{self.sound_to_use}<{math.floor(timestamp - self.last_timestamp)},{midi_to_dectalk(self.current_note_value)}>")
         self.last_timestamp = timestamp
 
+    def __repr__(self):
+        return f"<voice {self.voice_id} playing={self.playing_note} len={len(self.stream)}>"
+
 mid = mido.MidiFile(input("file: "), clip=True)
 
 track_id = 0
@@ -55,7 +58,9 @@ for track in mid.tracks:
     print("Processing track", track_id)
 
     ms_counter = 0
-    voices = [DectalkVoice(i, track_phonemes.get(str(track_id), "_")) for i in range(8)]
+    voice_id_counter = 0
+    voices = [DectalkVoice(str(voice_id_counter), track_phonemes.get(str(track_id), "_"))]
+    voice_id_counter += 1
     note_voice_map = {}
 
     for msg in mid.tracks[track_id]:
@@ -71,9 +76,12 @@ for track in mid.tracks:
             print(f"Ticks/beat={mid.ticks_per_beat}")
         elif msg.type == "end_of_track":
             print("End of track", track_id)
+            ctr = 0
             for voice in voices:
                 if voice.playing_note:
                     voice.note_off(ms_counter)
+                    ctr += 1
+            print("Stopped", ctr, "voices still playing")
             print("Stream items per voice: ", end="")
             for voice in voices:
                 print(f"{len(voice.stream)}, ", end="")
@@ -88,27 +96,31 @@ for track in mid.tracks:
                     break
             
             if selected_voice == None:
-                raise Exception(f"ran out of voices?? ms_counter={ms_counter}")
+                #raise Exception(f"ran out of voices?? ms_counter={ms_counter} note_voice_map={note_voice_map}")
+                selected_voice = DectalkVoice(str(voice_id_counter), track_phonemes.get(str(track_id), "_"))
+                voices.append(selected_voice)
+                voice_id_counter += 1
+                #print("Added new voice", selected_voice)
 
             selected_voice.note_on(msg.note, ms_counter)
-            if note_voice_map.get(msg.note) is None:
-                note_voice_map[msg.note] = []
 
-            note_voice_map[msg.note].append(selected_voice)
+            if note_voice_map.get(msg.note) is not None:
+                if note_voice_map[msg.note].playing_note:
+                    print("WARN: Implicit note_off on", selected_voice, ms_counter)
+                    note_voice_map[msg.note].note_off(ms_counter)
+
+            note_voice_map[msg.note] = selected_voice
         elif msg.type == "note_off":
-            selected_voice_list = note_voice_map.get(msg.note)
+            selected_voice = note_voice_map.get(msg.note)
 
-            if selected_voice_list == None:
-                raise Exception(f"couldn't find voice list?? msg.note={msg.note} ms_counter={ms_counter} note_voice_map={note_voice_map}")
+            if selected_voice == None:
+                raise Exception(f"couldn't find voice?? msg.note={msg.note} ms_counter={ms_counter} note_voice_map={note_voice_map}")
 
-            if len(selected_voice_list) == 0:
-                raise Exception(f"voice list is empty?? msg.note={msg.note} ms_counter={ms_counter} note_voice_map={note_voice_map}")
-
-            selected_voice = selected_voice_list.pop(0)
             selected_voice.note_off(ms_counter)
 
-            if len(selected_voice_list) == 0:
-                del note_voice_map[msg.note]
+            del note_voice_map[msg.note]
+        else:
+            print("Skipping unknown msg", msg)
     
     for voice in voices:
         file_ctr = 0
